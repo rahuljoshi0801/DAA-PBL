@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Dynamic Traffic Signal Optimizer — DAA Project</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+/* ── Reset & base ── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:#0a0c10;color:#e2e4ea;font-family:'Space Grotesk',sans-serif;font-size:14px;line-height:1.5;overflow-x:hidden}
+:root{
+  --bg0:#0a0c10;--bg1:#111318;--bg2:#181b22;--bg3:#20242e;
+  --border:#2a2f3d;--border2:#353b4d;
+  --text1:#e2e4ea;--text2:#8890a6;--text3:#555d73;
+  --green:#22c55e;--green-dim:#16783a;--green-glow:rgba(34,197,94,.18);
+  --red:#ef4444;--yellow:#f59e0b;
+  --blue:#3b82f6;--purple:#a855f7;--orange:#f97316;--pink:#ec4899;
+  --mono:'JetBrains Mono',monospace;
+}
+
+/* ── Layout ── */
+.app{display:grid;grid-template-rows:56px 1fr;grid-template-columns:260px 1fr 280px;min-height:100vh}
+header{grid-column:1/-1;display:flex;align-items:center;gap:16px;padding:0 24px;background:var(--bg1);border-bottom:1px solid var(--border)}
+.logo{width:28px;height:28px;background:var(--green);border-radius:6px;display:grid;place-items:center}
+.logo svg{width:16px;height:16px;fill:none;stroke:#000;stroke-width:2.5;stroke-linecap:round}
+h1{font-size:15px;font-weight:600;letter-spacing:.01em}
+.header-sub{font-size:11px;color:var(--text3);margin-left:auto;font-family:var(--mono)}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:20px;font-size:11px;font-family:var(--mono);border:1px solid;margin-left:8px}
+.badge.green{color:var(--green);border-color:var(--green-dim);background:var(--green-glow)}
+.badge.dim{color:var(--text3);border-color:var(--border)}
+
+/* ── Left panel ── */
+.left-panel{padding:16px;border-right:1px solid var(--border);background:var(--bg1);display:flex;flex-direction:column;gap:12px;overflow-y:auto}
+.section-title{font-size:10px;font-weight:600;letter-spacing:.08em;color:var(--text3);text-transform:uppercase;margin-bottom:8px}
+
+/* Stat cards */
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.stat-card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
+.stat-card .val{font-size:22px;font-weight:600;font-family:var(--mono);color:var(--text1)}
+.stat-card .lbl{font-size:10px;color:var(--text2);margin-top:2px;letter-spacing:.04em}
+.stat-card.eff .val{color:var(--green)}
+
+/* Road input sliders */
+.road-control{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
+.road-control-header{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.road-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.road-name{font-size:12px;font-weight:500;flex:1}
+.road-vcount{font-family:var(--mono);font-size:12px;color:var(--text2)}
+input[type=range]{width:100%;height:4px;-webkit-appearance:none;background:var(--bg3);border-radius:2px;outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:var(--text1);cursor:pointer;border:2px solid var(--bg0)}
+
+/* ── Center panel ── */
+.center-panel{padding:20px;display:flex;flex-direction:column;gap:16px;overflow-y:auto}
+
+/* Intersection canvas */
+.intersection-card{background:var(--bg1);border:1px solid var(--border);border-radius:14px;padding:20px;display:flex;flex-direction:column;align-items:center}
+canvas#inter{border-radius:10px;background:var(--bg2)}
+
+/* Control bar */
+.ctrl-bar{display:flex;gap:8px;flex-wrap:wrap}
+.btn{padding:8px 16px;border-radius:8px;border:1px solid var(--border2);background:var(--bg2);color:var(--text1);font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:.15s}
+.btn:hover{background:var(--bg3);border-color:var(--text3)}
+.btn.primary{background:var(--green);color:#000;border-color:transparent}
+.btn.primary:hover{opacity:.9}
+.btn.danger{border-color:rgba(239,68,68,.4);color:#f87171}
+.btn.danger:hover{background:rgba(239,68,68,.08)}
+
+/* Phase progress bar */
+.phase-bar-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px 16px}
+.phase-label{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.phase-name{font-size:12px;font-weight:500}
+.phase-time{font-family:var(--mono);font-size:12px;color:var(--green)}
+.phase-track{height:6px;background:var(--bg3);border-radius:3px;overflow:hidden}
+.phase-fill{height:100%;background:var(--green);border-radius:3px;transition:width .8s linear}
+
+/* ── Right panel ── */
+.right-panel{padding:16px;border-left:1px solid var(--border);background:var(--bg1);display:flex;flex-direction:column;gap:12px;overflow-y:auto}
+
+/* Queue list */
+.queue-item{display:flex;align-items:center;gap:10px;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;transition:.2s}
+.queue-item.active{border-color:var(--green);background:rgba(34,197,94,.06)}
+.queue-rank{width:22px;height:22px;border-radius:50%;background:var(--bg3);display:grid;place-items:center;font-size:10px;font-weight:600;flex-shrink:0;font-family:var(--mono)}
+.queue-item.active .queue-rank{background:var(--green);color:#000}
+.queue-body{flex:1}
+.queue-road{font-size:12px;font-weight:500}
+.queue-detail{font-size:10px;color:var(--text2);font-family:var(--mono)}
+.queue-time{font-family:var(--mono);font-size:12px;color:var(--text2)}
+.queue-item.active .queue-time{color:var(--green)}
+.queue-bar-wrap{width:60px;height:4px;background:var(--bg3);border-radius:2px;overflow:hidden;margin-top:4px}
+.queue-bar{height:100%;border-radius:2px;transition:width .5s}
+
+/* Log */
+.log-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-family:var(--mono);font-size:11px;max-height:140px;overflow-y:auto;color:var(--text2)}
+.log-line{padding:1px 0;line-height:1.6}
+.log-line.g{color:var(--green)}
+.log-line.y{color:var(--yellow)}
+.log-line.r{color:#f87171}
+
+/* Algorithm trace box */
+.algo-trace{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px}
+.algo-step{display:flex;gap:8px;align-items:flex-start;margin-bottom:6px;font-size:11px;color:var(--text2)}
+.algo-step:last-child{margin-bottom:0}
+.algo-num{background:var(--bg3);border:1px solid var(--border2);border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;flex-shrink:0;color:var(--text1);font-family:var(--mono)}
+code{background:var(--bg3);padding:1px 5px;border-radius:3px;color:#94d8b0;font-size:10px}
+
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.pulsing{animation:pulse 1s ease-in-out infinite}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- Header -->
+<header>
+  <div class="logo">
+    <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 5v4M8 11v1"/></svg>
+  </div>
+  <h1>Dynamic Traffic Signal Optimizer</h1>
+  <span class="badge green" id="status-badge">● RUNNING</span>
+  <span class="badge dim">DAA Project</span>
+  <span class="header-sub" id="clock">--:--:--</span>
+</header>
+
+<!-- Left: Stats + sliders -->
+<aside class="left-panel">
+  <div>
+    <div class="section-title">System metrics</div>
+    <div class="stat-grid">
+      <div class="stat-card"><div class="val" id="s-cycle">0</div><div class="lbl">CYCLES</div></div>
+      <div class="stat-card"><div class="val" id="s-cleared">0</div><div class="lbl">CLEARED</div></div>
+      <div class="stat-card eff"><div class="val" id="s-eff">—</div><div class="lbl">EFFICIENCY</div></div>
+      <div class="stat-card"><div class="val" id="s-active">—</div><div class="lbl">ACTIVE ROAD</div></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="section-title">Traffic density — drag to set</div>
+    <div id="road-controls"></div>
+  </div>
+
+  <div class="algo-trace">
+    <div class="section-title">Algorithm</div>
+    <div class="algo-step"><div class="algo-num">1</div><span>Sort roads by vehicle count (greedy max-priority)</span></div>
+    <div class="algo-step"><div class="algo-num">2</div><span>Compute: <code>T = (V / Vtotal) × 120s</code></span></div>
+    <div class="algo-step"><div class="algo-num">3</div><span>Clamp to <code>[5s, 60s]</code> per road</span></div>
+    <div class="algo-step"><div class="algo-num">4</div><span>Discharge vehicles after each green phase, re-sort</span></div>
+    <div class="algo-step"><div class="algo-num">★</div><span>Exchange arg. proves greedy order minimises total weighted wait</span></div>
+  </div>
+</aside>
+
+<!-- Center: Intersection + controls -->
+<main class="center-panel">
+  <div class="ctrl-bar">
+    <button class="btn primary" onclick="toggleSim()" id="btn-run">⏸ Pause</button>
+    <button class="btn" onclick="stepOnce()">Step ›</button>
+    <button class="btn" onclick="randomize()">Randomize</button>
+    <button class="btn danger" onclick="resetSim()">Reset</button>
+    <span style="font-size:11px;color:var(--text3);margin-left:auto;align-self:center">ESC = pause &nbsp;|&nbsp; OpenCV: MOG2 / KNN</span>
+  </div>
+
+  <div class="intersection-card">
+    <canvas id="inter" width="400" height="400"></canvas>
+  </div>
+
+  <div class="phase-bar-wrap">
+    <div class="phase-label">
+      <span class="phase-name" id="phase-name">North — GREEN</span>
+      <span class="phase-time" id="phase-time">30s</span>
+    </div>
+    <div class="phase-track"><div class="phase-fill" id="phase-fill" style="width:100%"></div></div>
+  </div>
+</main>
+
+<!-- Right: Queue + log -->
+<aside class="right-panel">
+  <div>
+    <div class="section-title">Signal queue (greedy order)</div>
+    <div id="queue-list" style="display:flex;flex-direction:column;gap:6px"></div>
+  </div>
+
+  <div>
+    <div class="section-title">Event log</div>
+    <div class="log-wrap" id="log"></div>
+  </div>
+</aside>
+
+</div><!-- .app -->
+
+<script>
+const ROADS = [
+  {name:'North', color:'#3b82f6'},
+  {name:'South', color:'#f97316'},
+  {name:'East',  color:'#22c55e'},
+  {name:'West',  color:'#ec4899'},
+];
+const T_CYCLE=120, MIN_G=5, MAX_G=60, YELLOW_T=3, DISCHARGE=0.55;
+
+let vehicles=[38,15,52,27];
+let state={
+  running:true, phaseIdx:0, timer:0, yellow:false, yellowTimer:0,
+  cycle:0, cleared:0, schedule:[], tick:0, interval:null
+};
+
+// ── Greedy Scheduler (mirrors C++ logic) ──
+function buildSchedule(){
+  const total=vehicles.reduce((a,b)=>a+b,0)||1;
+  const sorted=vehicles.map((v,i)=>({i,v})).sort((a,b)=>b.v-a.v);
+  state.schedule=sorted.map((e,rank)=>{
+    let t=Math.round(e.v/total*T_CYCLE);
+    t=Math.max(MIN_G,Math.min(MAX_G,t));
+    return{roadIdx:e.i,vehicles:e.v,greenTime:t,rank};
+  });
+}
+
+function efficiency(){
+  const tot=vehicles.reduce((a,b)=>a+b,0);
+  return Math.max(0,100-Math.round(tot/(ROADS.length*80)*100));
+}
+
+// ── Simulation tick ──
+function simArrivals(){
+  vehicles=vehicles.map(v=>Math.max(0,v+Math.floor(Math.random()*7)-1));
+}
+
+function tick(){
+  state.tick++;
+  simArrivals();
+  const sched=state.schedule;
+  const cur=sched[state.phaseIdx%sched.length];
+
+  if(state.yellow){
+    state.yellowTimer--;
+    if(state.yellowTimer<=0){
+      state.yellow=false;
+      state.phaseIdx=(state.phaseIdx+1)%sched.length;
+      if(state.phaseIdx===0){
+        state.cycle++;
+        buildSchedule();
+        state.timer=state.schedule[0].greenTime;
+        log(`Cycle ${state.cycle} complete — re-sorted by density`,'y');
+      } else {
+        state.timer=sched[state.phaseIdx].greenTime;
+      }
+      const nxt=state.schedule[state.phaseIdx%state.schedule.length];
+      log(`GREEN → ${ROADS[nxt.roadIdx].name} (${nxt.vehicles}v) for ${nxt.greenTime}s`,'g');
+    }
+    drawAll();updateUI();return;
+  }
+
+  state.timer--;
+  if(state.timer<=0){
+    const discharge=Math.min(vehicles[cur.roadIdx],
+      Math.round(cur.vehicles*DISCHARGE*(cur.greenTime/MAX_G)));
+    vehicles[cur.roadIdx]=Math.max(0,vehicles[cur.roadIdx]-discharge);
+    state.cleared+=discharge;
+    log(`RED → ${ROADS[cur.roadIdx].name}: discharged ${discharge}v`,'r');
+    state.yellow=true;
+    state.yellowTimer=YELLOW_T;
+    buildSchedule();
+  }
+
+  drawAll();updateUI();
+}
+
+// ── Canvas intersection drawing ──
+const CV=document.getElementById('inter');
+const CX2D=CV.getContext('2d');
+const W=400,H=400,CX=W/2,CY=H/2;
+
+function getSignalColor(roadIdx){
+  const cur=state.schedule[state.phaseIdx%state.schedule.length];
+  if(!cur) return 'red';
+  if(cur.roadIdx!==roadIdx) return '#ef4444';
+  if(state.yellow) return '#f59e0b';
+  return '#22c55e';
+}
+
+function drawAll(){
+  const C=CX2D;
+  C.clearRect(0,0,W,H);
+
+  // Background
+  C.fillStyle='#111318';C.fillRect(0,0,W,H);
+
+  // Road strips
+  const ANGLES=[270,90,0,180]; // N,S,E,W
+  ANGLES.forEach((angle,i)=>{
+    const r=angle*Math.PI/180;
+    const ex=CX+Math.cos(r)*(H/2-8);
+    const ey=CY+Math.sin(r)*(H/2-8);
+    C.save();C.translate(CX,CY);C.rotate(r);
+    C.fillStyle='#1e2330';
+    C.fillRect(-28,-4,28+120,52);
+    C.fillRect(-28,-28,52,28+4);
+    C.restore();
+    // Center road
+    C.save();C.translate(CX,CY);C.rotate(r);
+    C.fillStyle='#252b3b';
+    C.fillRect(-24,0,48,H/2-44);
+    // Dashed center line
+    C.setLineDash([8,10]);C.strokeStyle='#3a4155';C.lineWidth=1.5;
+    C.beginPath();C.moveTo(0,4);C.lineTo(0,H/2-46);C.stroke();
+    C.setLineDash([]);
+    C.restore();
+  });
+
+  // Center box
+  C.fillStyle='#1e2330';
+  roundRect(CX-28,CY-28,56,56,6,'#1e2330','#2a3040');
+
+  // Road nodes with signals
+  ANGLES.forEach((angle,i)=>{
+    const r=angle*Math.PI/180;
+    const nx=CX+Math.cos(r)*130;
+    const ny=CY+Math.sin(r)*130;
+    const sig=getSignalColor(i);
+    const active=sig==='#22c55e';
+
+    // Outer glow for active
+    if(active){
+      C.save();C.globalAlpha=.18;
+      C.fillStyle='#22c55e';
+      C.beginPath();C.arc(nx,ny,36,0,Math.PI*2);C.fill();
+      C.restore();
+    }
+
+    // Node circle
+    C.fillStyle=active?'#1a3a24':'#1e2330';
+    C.strokeStyle=active?'#22c55e':'#2a3040';
+    C.lineWidth=active?2:1;
+    C.beginPath();C.arc(nx,ny,28,0,Math.PI*2);C.fill();C.stroke();
+
+    // Signal lamp
+    C.beginPath();C.arc(nx,ny,11,0,Math.PI*2);
+    C.fillStyle=sig;C.fill();
+
+    // Label
+    C.fillStyle='#8890a6';C.font='500 11px Space Grotesk,sans-serif';
+    C.textAlign='center';
+    C.fillText(ROADS[i].name,nx,ny+(angle===270?-38:angle===90?42:0)+(angle===0||angle===180?-4:0));
+    if(angle===0) C.fillText(ROADS[i].name,nx+46,ny+4);
+    if(angle===180) C.fillText(ROADS[i].name,nx-46,ny+4);
+
+    // Vehicle count
+    C.fillStyle='#f0e040';C.font='500 11px JetBrains Mono,monospace';
+    C.fillText(vehicles[i]+'v',nx,ny+5);
+  });
+
+  // Timer arc on active node
+  const cur=state.schedule[state.phaseIdx%state.schedule.length];
+  if(cur){
+    const angle=ANGLES[ROADS.findIndex((r,i)=>i===cur.roadIdx)];
+    const ra=angle*Math.PI/180;
+    const nx=CX+Math.cos(ra)*130, ny=CY+Math.sin(ra)*130;
+    const frac=state.timer/cur.greenTime;
+    C.strokeStyle='#22c55e';C.lineWidth=3;
+    C.beginPath();
+    C.arc(nx,ny,33,-Math.PI/2,-Math.PI/2+frac*Math.PI*2);
+    C.stroke();
+
+    C.fillStyle='#22c55e';C.font='500 10px JetBrains Mono,monospace';
+    C.textAlign='center';
+    C.fillText(state.timer+'s',CX,CY+5);
+  }
+
+  // Legend bottom
+  C.fillStyle='#555d73';C.font='10px Space Grotesk,sans-serif';C.textAlign='left';
+  C.fillText('● Green: active road  ● Red: waiting  ● Yellow: transition',16,H-10);
+}
+
+function roundRect(x,y,w,h,r,fill,stroke){
+  const C=CX2D;
+  C.beginPath();
+  C.moveTo(x+r,y);C.lineTo(x+w-r,y);C.arcTo(x+w,y,x+w,y+r,r);
+  C.lineTo(x+w,y+h-r);C.arcTo(x+w,y+h,x+w-r,y+h,r);
+  C.lineTo(x+r,y+h);C.arcTo(x,y+h,x,y+h-r,r);
+  C.lineTo(x,y+r);C.arcTo(x,y,x+r,y,r);C.closePath();
+  C.fillStyle=fill;C.fill();
+  if(stroke){C.strokeStyle=stroke;C.lineWidth=1;C.stroke();}
+}
+
+// ── UI Updates ──
+function updateUI(){
+  document.getElementById('s-cycle').textContent=state.cycle;
+  document.getElementById('s-cleared').textContent=state.cleared;
+  document.getElementById('s-eff').textContent=efficiency()+'%';
+
+  const cur=state.schedule[state.phaseIdx%state.schedule.length];
+  if(cur){
+    const name=ROADS[cur.roadIdx].name;
+    document.getElementById('s-active').textContent=name;
+    const phaseName=name+' — '+(state.yellow?'YELLOW':'GREEN');
+    document.getElementById('phase-name').textContent=phaseName;
+    document.getElementById('phase-time').textContent=state.timer+'s';
+    const pct=Math.round(state.timer/cur.greenTime*100);
+    document.getElementById('phase-fill').style.width=pct+'%';
+    document.getElementById('phase-fill').style.background=
+      state.yellow?'#f59e0b':'#22c55e';
+  }
+
+  // Queue
+  const ql=document.getElementById('queue-list');
+  ql.innerHTML=state.schedule.map((s,idx)=>{
+    const active=idx===state.phaseIdx%state.schedule.length;
+    const r=ROADS[s.roadIdx];
+    const barW=Math.round(s.vehicles/80*100);
+    return `<div class="queue-item ${active?'active':''}">
+      <div class="queue-rank">${s.rank+1}</div>
+      <div class="queue-body">
+        <div class="queue-road" style="color:${r.color}">${r.name}</div>
+        <div class="queue-detail">${s.vehicles}v · ${s.greenTime}s green</div>
+        <div class="queue-bar-wrap"><div class="queue-bar" style="width:${barW}%;background:${r.color}80;border-right:2px solid ${r.color}"></div></div>
+      </div>
+      <div class="queue-time">${active?(state.timer+'s'):(s.greenTime+'s')}</div>
+    </div>`;
+  }).join('');
+
+  // Clock
+  document.getElementById('clock').textContent=new Date().toLocaleTimeString();
+
+  // Sliders
+  document.querySelectorAll('.road-vcount').forEach((el,i)=>{
+    el.textContent=vehicles[i];
+  });
+  document.querySelectorAll('.road-slider').forEach((el,i)=>{
+    el.value=vehicles[i];
+  });
+}
+
+function buildSliders(){
+  const el=document.getElementById('road-controls');
+  el.innerHTML=ROADS.map((r,i)=>`
+    <div class="road-control" style="margin-bottom:8px">
+      <div class="road-control-header">
+        <div class="road-dot" style="background:${r.color}"></div>
+        <span class="road-name">${r.name}</span>
+        <span class="road-vcount" id="vc-${i}">${vehicles[i]}</span>
+      </div>
+      <input type="range" class="road-slider" min="0" max="80" value="${vehicles[i]}"
+        oninput="setV(${i},+this.value)">
+    </div>
+  `).join('');
+}
+
+function setV(i,v){
+  vehicles[i]=v;
+  document.getElementById('vc-'+i).textContent=v;
+  if(!state.running) buildSchedule();
+}
+
+function log(msg,type=''){
+  const el=document.getElementById('log');
+  const d=document.createElement('div');
+  d.className='log-line '+type;
+  d.textContent=`[${String(state.tick).padStart(4,'0')}] `+msg;
+  el.appendChild(d);
+  el.scrollTop=el.scrollHeight;
+  if(el.children.length>60)el.children[0].remove();
+}
+
+// ── Controls ──
+function toggleSim(){
+  state.running=!state.running;
+  const btn=document.getElementById('btn-run');
+  if(state.running){
+    state.interval=setInterval(tick,1000);
+    btn.textContent='⏸ Pause';
+    document.getElementById('status-badge').textContent='● RUNNING';
+  } else {
+    clearInterval(state.interval);
+    btn.textContent='▶ Resume';
+    document.getElementById('status-badge').textContent='● PAUSED';
+  }
+}
+
+function stepOnce(){
+  if(state.running){clearInterval(state.interval);state.running=false;}
+  tick();
+}
+
+function randomize(){
+  vehicles=ROADS.map(()=>Math.floor(Math.random()*73)+4);
+  buildSliders();buildSchedule();
+  log('Randomized: '+vehicles.map((v,i)=>ROADS[i].name+':'+v).join(', '),'y');
+  drawAll();updateUI();
+}
+
+function resetSim(){
+  clearInterval(state.interval);
+  vehicles=[38,15,52,27];
+  state={running:false,phaseIdx:0,timer:0,yellow:false,yellowTimer:0,
+    cycle:0,cleared:0,schedule:[],tick:0,interval:null};
+  buildSchedule();
+  state.timer=state.schedule[0].greenTime;
+  buildSliders();drawAll();updateUI();
+  document.getElementById('btn-run').textContent='▶ Resume';
+  document.getElementById('status-badge').textContent='● PAUSED';
+  document.getElementById('log').innerHTML='<div class="log-line">Reset.</div>';
+}
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape')toggleSim();
+  if(e.key==='ArrowRight')stepOnce();
+});
+
+// ── Init ──
+buildSchedule();
+state.timer=state.schedule[0].greenTime;
+buildSliders();
+log(`GREEN → ${ROADS[state.schedule[0].roadIdx].name} for ${state.schedule[0].greenTime}s`,'g');
+drawAll();updateUI();
+state.interval=setInterval(tick,1000);
+</script>
+</body>
+</html>
