@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <numeric>
@@ -428,10 +429,65 @@ public:
 
   bool isDone() { return done; }
 
+  // ── Write live state to state.json so dashboard.html can read it ─────────
+  void writeState() {
+    std::ofstream f("state.json");
+    if (!f.is_open()) return;
+    auto sigStr = [](Sig s) -> std::string {
+      if (s == Sig::G) return "G";
+      if (s == Sig::Y) return "Y";
+      return "R";
+    };
+    int totalV = 0;
+    for (auto &r : roads) totalV += r.vehicles;
+    int eff = GreedyScheduler::efficiency(roads, schedule);
+
+    f << "{\n";
+    f << "  \"cycle\": " << cycle << ",\n";
+    f << "  \"cleared\": " << cleared << ",\n";
+    f << "  \"efficiency\": " << eff << ",\n";
+    f << "  \"timer\": " << timer << ",\n";
+    f << "  \"phaseIdx\": " << (pi % (int)schedule.size()) << ",\n";
+    f << "  \"yellow\": " << (yPhase ? "true" : "false") << ",\n";
+    f << "  \"done\": " << (done ? "true" : "false") << ",\n";
+    f << "  \"maxCycles\": " << MAX_CYCLES << ",\n";
+
+    // Roads array
+    f << "  \"roads\": [\n";
+    for (int i = 0; i < (int)roads.size(); i++) {
+      f << "    {";
+      f << "\"name\":\"" << roads[i].name << "\",";
+      f << "\"vehicles\":" << roads[i].vehicles << ",";
+      f << "\"signal\":\"" << sigStr(roads[i].signal) << "\",";
+      f << "\"hasEmergency\":" << (roads[i].hasEmergency ? "true" : "false") << ",";
+      f << "\"totalCleared\":" << roads[i].totalCleared;
+      f << "}" << (i < (int)roads.size()-1 ? "," : "") << "\n";
+    }
+    f << "  ],\n";
+
+    // Schedule array
+    f << "  \"schedule\": [\n";
+    for (int i = 0; i < (int)schedule.size(); i++) {
+      const SchedEntry &s = schedule[i];
+      f << "    {";
+      f << "\"roadIdx\":" << s.roadIdx << ",";
+      f << "\"vehicles\":" << s.vehicles << ",";
+      f << "\"greenTime\":" << s.greenTime << ",";
+      f << "\"rank\":" << s.rank << ",";
+      f << "\"emergency\":" << (s.hasEmergency ? "true" : "false") << ",";
+      f << "\"active\":" << (i == pi % (int)schedule.size() ? "true" : "false");
+      f << "}" << (i < (int)schedule.size()-1 ? "," : "") << "\n";
+    }
+    f << "  ]\n";
+    f << "}\n";
+    f.close();
+  }
+
   void render() {
     std::cout << CLRSCR;
     printHeader();
     printView(roads, schedule, pi, timer, cycle, cleared);
+    writeState(); // ← sync state to dashboard
   }
 
   void printFinalReport() {

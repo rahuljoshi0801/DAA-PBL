@@ -675,6 +675,67 @@
     };
     let sirenPhase = 0; // For animated siren effect
 
+    // ── C++ Bridge: Poll state.json written by main.exe ──────────────────
+    let cppConnected = false;
+    const CPP_NAME_MAP = { 'North': 0, 'South': 1, 'East': 2, 'West': 3 };
+
+    async function pollCppState() {
+      try {
+        const resp = await fetch('state.json?t=' + Date.now());
+        if (!resp.ok) throw new Error('not found');
+        const data = await resp.json();
+
+        if (!cppConnected) {
+          cppConnected = true;
+          clearInterval(state.interval); // stop JS simulation
+          state.running = false;
+          document.getElementById('status-badge').textContent = '🔗 C++ CONNECTED';
+          document.getElementById('status-badge').className = 'badge green';
+          document.getElementById('btn-run').style.opacity = '0.4';
+          document.getElementById('btn-run').style.pointerEvents = 'none';
+          log('C++ main.exe connected — live data streaming.', 'g');
+        }
+
+        // Map C++ road data → dashboard vehicles array
+        data.roads.forEach(r => {
+          const idx = CPP_NAME_MAP[r.name];
+          if (idx !== undefined) {
+            vehicles[idx] = r.vehicles;
+            emergency[idx] = r.hasEmergency;
+          }
+        });
+
+        // Sync C++ state → dashboard state
+        state.phaseIdx = data.phaseIdx;
+        state.timer = data.timer;
+        state.yellow = data.yellow;
+        state.cycle = data.cycle;
+        state.cleared = data.cleared;
+        state.schedule = data.schedule.map(s => ({
+          roadIdx: s.roadIdx, vehicles: s.vehicles,
+          greenTime: s.greenTime, rank: s.rank, emergency: s.emergency
+        }));
+
+        sirenPhase = (sirenPhase + 1) % 6;
+        drawAll(); updateUI();
+
+        if (data.done) {
+          document.getElementById('status-badge').textContent = '✅ SIMULATION DONE';
+          log('C++ simulation complete. See terminal for final report.', 'y');
+        }
+      } catch (e) {
+        if (cppConnected) {
+          cppConnected = false;
+          document.getElementById('btn-run').style.opacity = '';
+          document.getElementById('btn-run').style.pointerEvents = '';
+          log('C++ disconnected. Reverting to JS demo mode.', 'r');
+        }
+      }
+    }
+
+    // Poll every 300ms — matches C++ sleepMs(300) tick rate
+    setInterval(pollCppState, 300);
+
     // ── Greedy Scheduler (Emergency-Aware) ──
     function buildSchedule() {
       const total = vehicles.reduce((a, b) => a + b, 0) || 1;
