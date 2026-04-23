@@ -664,9 +664,10 @@
       { name: 'East Bound', color: '#66ffbb', angle: 1 },
       { name: 'West Bound', color: '#ff5555', angle: 179 },
     ];
-    const T_CYCLE = 60, MIN_G = 5, MAX_G = 45, YELLOW_T = 2, DISCHARGE = 2;
+    const T_CYCLE = 60, MIN_G = 5, MAX_G = 45, YELLOW_T = 2, DISCHARGE = 0.55;
 
-    let vehicles = [0, 0, 0, 0];
+    // FIX: Start with realistic non-zero vehicle counts
+    let vehicles = [30, 12, 50, 22];
     let state = {
       running: true, phaseIdx: 0, timer: 0, yellow: false, yellowTimer: 0,
       cycle: 0, cleared: 0, schedule: [], tick: 0, interval: null
@@ -690,7 +691,8 @@
 
     // ── Tick Logic ──
     function simArrivals() {
-      vehicles = vehicles.map(v => Math.max(0, v + Math.floor(Math.random() * 7) - 1));
+      // FIX: Guarantee at least 1 new arrival per tick to prevent all-zero starvation
+      vehicles = vehicles.map(v => Math.max(1, v + Math.floor(Math.random() * 5)));
     }
 
     function tick() {
@@ -720,8 +722,10 @@
 
       state.timer--;
       if (state.timer <= 0) {
+        // FIX: Clamp discharge so it never exceeds actual vehicles present
+        const maxClearable = Math.round(cur.greenTime * 2); // 2 vehicles/sec throughput
         const discharge = Math.min(vehicles[cur.roadIdx],
-          Math.round(cur.vehicles * DISCHARGE * (cur.greenTime / MAX_G)));
+          Math.min(maxClearable, Math.round(cur.vehicles * DISCHARGE * (cur.greenTime / MAX_G))));
         vehicles[cur.roadIdx] = Math.max(0, vehicles[cur.roadIdx] - discharge);
         state.cleared += discharge;
         log(`[PHASE] ${ROADS[cur.roadIdx].name} -> RED (Cleared: ${discharge}v)`, 'r');

@@ -274,7 +274,7 @@ class TrafficSystem {
   int pi = 0, timer = 0, cycle = 1, cleared = 0;
   bool yPhase = false, done = false;
   int yTimer = 0;
-  const int MAX_CYCLES = 3;
+  int MAX_CYCLES = 3; // FIX 3: No longer const — user-configurable at runtime
 
   void allRed() {
     for (int i = 0; i < (int)roads.size(); i++)
@@ -296,9 +296,11 @@ class TrafficSystem {
   }
 
   void discharge(int idx) {
-    int n = (int)(roads[idx].vehicles * 0.70f);
+    // FIX 2: Use float before casting to int to avoid truncation losing the last car
+    float frac = roads[idx].vehicles * 0.70f;
+    int n = (int)(frac + 0.5f); // round instead of truncate
     if (n < 1 && roads[idx].vehicles > 0)
-      n = 1;
+      n = 1; // always clear at least 1 car
     if (n > roads[idx].vehicles)
       n = roads[idx].vehicles;
     roads[idx].vehicles -= n;
@@ -331,6 +333,27 @@ public:
       roads.push_back(r);
     }
     std::cin.ignore();
+
+    // FIX 1: Warn if all roads have zero vehicles — simulation will be trivial
+    int totalInput = 0;
+    for (int i = 0; i < 4; i++) totalInput += roads[i].vehicles;
+    if (totalInput == 0) {
+      std::cout << YLW << "  WARNING: All roads have 0 vehicles. "
+                << "Simulation will run with minimum green times only.\n" << RST;
+    }
+
+    // FIX 3: Let user choose number of cycles (default 3)
+    int userCycles = 0;
+    while (userCycles < 1 || userCycles > 10) {
+      std::cout << "  Number of simulation cycles (1-10, default 3): ";
+      std::string line;
+      std::getline(std::cin, line);
+      if (line.empty()) { userCycles = 3; break; }
+      try { userCycles = std::stoi(line); } catch (...) { userCycles = 0; }
+      if (userCycles < 1 || userCycles > 10)
+        std::cout << "  Please enter 1-10.\n";
+    }
+    const_cast<int&>(MAX_CYCLES) = userCycles;
 
     std::cout << "\n"
               << GRN << "  Starting simulation (" << MAX_CYCLES
