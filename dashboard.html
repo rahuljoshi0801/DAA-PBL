@@ -1,0 +1,993 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Dynamic Traffic Signal Optimizer — DAA Project</title>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap"
+    rel="stylesheet" />
+  <style>
+    /* ── Reset & Base ── */
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0
+    }
+
+    :root {
+      --bg-gradient: radial-gradient(circle at 50% 0%, #1e1b4b 0%, #020617 70%, #000000 100%);
+      --glass-bg: rgba(255, 255, 255, 0.02);
+      --glass-bg-hover: rgba(255, 255, 255, 0.05);
+      --glass-border: rgba(255, 255, 255, 0.06);
+      --glass-border-light: rgba(255, 255, 255, 0.12);
+      --text1: #f8fafc;
+      --text2: #94a3b8;
+      --text3: #475569;
+      --green: #10b981;
+      --green-dim: rgba(16, 185, 129, 0.15);
+      --yellow: #f59e0b;
+      --red: #f43f5e;
+      --blue: #3b82f6;
+      --purple: #8b5cf6;
+      --orange: #f97316;
+      --pink: #ec4899;
+      --font-sans: 'Outfit', sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+      --shadow-glow: 0 0 20px rgba(16, 185, 129, 0.3);
+    }
+
+    html,
+    body {
+      height: 100%;
+      background: var(--bg-gradient);
+      background-attachment: fixed;
+      color: var(--text1);
+      font-family: var(--font-sans);
+      font-size: 14px;
+      line-height: 1.5;
+      overflow-x: hidden;
+    }
+
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    /* ── Layout ── */
+    .app {
+      display: grid;
+      grid-template-rows: 72px 1fr;
+      grid-template-columns: 320px 1fr 340px;
+      min-height: 100vh;
+      gap: 20px;
+      padding: 20px;
+      max-width: 1800px;
+      margin: 0 auto;
+    }
+
+    /* Glassmorphism Panel Base */
+    .glass-panel {
+      background: var(--glass-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--glass-border);
+      border-radius: 20px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    }
+
+    /* ── Header ── */
+    header {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 0 24px;
+    }
+
+    .logo {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, var(--green), #059669);
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      box-shadow: var(--shadow-glow);
+    }
+
+    .logo svg {
+      width: 20px;
+      height: 20px;
+      fill: none;
+      stroke: #fff;
+      stroke-width: 2.5;
+      stroke-linecap: round;
+    }
+
+    h1 {
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+
+    .header-sub {
+      font-size: 13px;
+      color: var(--text2);
+      margin-left: auto;
+      font-family: var(--font-mono);
+      font-weight: 500;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      font-family: var(--font-mono);
+      letter-spacing: 0.5px;
+      border: 1px solid;
+      margin-left: 12px;
+    }
+
+    .badge.green {
+      color: #34d399;
+      border-color: rgba(52, 211, 153, 0.3);
+      background: rgba(52, 211, 153, 0.1);
+      box-shadow: 0 0 10px rgba(52, 211, 153, 0.2);
+    }
+
+    .badge.dim {
+      color: var(--text3);
+      border-color: var(--glass-border);
+      background: rgba(0, 0, 0, 0.2);
+    }
+
+    /* ── Panels ── */
+    .left-panel,
+    .right-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      padding: 24px;
+      overflow-y: auto;
+    }
+
+    .center-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .section-title {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      color: var(--text3);
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+
+    /* ── Stats Grid ── */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .stat-card {
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid var(--glass-border);
+      border-radius: 14px;
+      padding: 16px;
+      transition: transform 0.2s, border-color 0.2s;
+    }
+
+    .stat-card:hover {
+      transform: translateY(-2px);
+      border-color: var(--glass-border-light);
+    }
+
+    .stat-card .val {
+      font-size: 28px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      color: var(--text1);
+      line-height: 1;
+      text-shadow: 0 0 15px rgba(255, 255, 255, 0.1);
+    }
+
+    .stat-card .lbl {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text2);
+      margin-top: 6px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+
+    .stat-card.eff .val {
+      color: var(--green);
+      text-shadow: var(--shadow-glow);
+    }
+
+    /* ── Sliders ── */
+    .road-controls-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .road-control {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      padding: 14px;
+      transition: background 0.2s;
+    }
+
+    .road-control:hover {
+      background: rgba(0, 0, 0, 0.4);
+    }
+
+    .road-control-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .road-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      box-shadow: 0 0 8px currentColor;
+    }
+
+    .road-name {
+      font-size: 14px;
+      font-weight: 500;
+      flex: 1;
+    }
+
+    .road-vcount {
+      font-family: var(--font-mono);
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text1);
+      background: rgba(255, 255, 255, 0.05);
+      padding: 2px 8px;
+      border-radius: 6px;
+    }
+
+    input[type=range] {
+      width: 100%;
+      height: 6px;
+      -webkit-appearance: none;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 3px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #fff;
+      cursor: pointer;
+      box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+      transition: transform 0.1s;
+    }
+
+    input[type=range]::-webkit-slider-thumb:hover {
+      transform: scale(1.2);
+    }
+
+    /* ── Intersection Canvas ── */
+    .intersection-wrapper {
+      position: relative;
+      background: radial-gradient(circle at center, rgba(30, 41, 59, 0.4) 0%, rgba(0, 0, 0, 0.6) 100%);
+      border: 1px solid var(--glass-border);
+      border-radius: 50%;
+      padding: 20px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), inset 0 0 40px rgba(0, 0, 0, 0.5);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    canvas#inter {
+      border-radius: 50%;
+      filter: drop-shadow(0 0 10px rgba(0, 0, 0, 0.5));
+    }
+
+    /* ── Phase Bar ── */
+    .phase-bar-wrap {
+      width: 100%;
+      max-width: 500px;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid var(--glass-border);
+      border-radius: 16px;
+      padding: 16px 24px;
+      margin-top: auto;
+      backdrop-filter: blur(10px);
+    }
+
+    .phase-label {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      margin-bottom: 12px;
+    }
+
+    .phase-name {
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+
+    .phase-time {
+      font-family: var(--font-mono);
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--green);
+      text-shadow: var(--shadow-glow);
+      line-height: 1;
+    }
+
+    .phase-track {
+      height: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 4px;
+      overflow: hidden;
+      box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.5);
+    }
+
+    .phase-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--green), #34d399);
+      border-radius: 4px;
+      transition: width 1s linear, background-color 0.3s;
+      box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+    }
+
+    /* ── Control Buttons ── */
+    .ctrl-bar {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+      background: rgba(0, 0, 0, 0.2);
+      padding: 10px;
+      border-radius: 100px;
+      border: 1px solid var(--glass-border);
+    }
+
+    .btn {
+      padding: 10px 20px;
+      border-radius: 100px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text1);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      transform: translateY(-1px);
+    }
+
+    .btn:active {
+      transform: translateY(1px);
+    }
+
+    .btn.primary {
+      background: var(--text1);
+      color: #000;
+      box-shadow: 0 4px 15px rgba(255, 255, 255, 0.2);
+    }
+
+    .btn.primary:hover {
+      background: #e2e8f0;
+      box-shadow: 0 6px 20px rgba(255, 255, 255, 0.3);
+    }
+
+    .btn.danger {
+      color: var(--red);
+    }
+
+    .btn.danger:hover {
+      background: rgba(244, 63, 94, 0.1);
+      border-color: rgba(244, 63, 94, 0.2);
+    }
+
+    /* ── Queue List ── */
+    .queue-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .queue-item {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid var(--glass-border);
+      border-radius: 14px;
+      padding: 14px;
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .queue-item::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      width: 4px;
+      background: transparent;
+      transition: 0.3s;
+    }
+
+    .queue-item.active {
+      background: rgba(16, 185, 129, 0.05);
+      border-color: rgba(16, 185, 129, 0.3);
+      transform: translateX(4px);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    }
+
+    .queue-item.active::before {
+      background: var(--green);
+      box-shadow: 0 0 10px var(--green);
+    }
+
+    .queue-rank {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      display: grid;
+      place-items: center;
+      font-size: 12px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      color: var(--text2);
+    }
+
+    .queue-item.active .queue-rank {
+      background: var(--green);
+      color: #000;
+      box-shadow: var(--shadow-glow);
+    }
+
+    .queue-body {
+      flex: 1;
+    }
+
+    .queue-road {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+
+    .queue-detail {
+      font-size: 11px;
+      color: var(--text2);
+      font-family: var(--font-mono);
+      font-weight: 500;
+    }
+
+    .queue-time {
+      font-family: var(--font-mono);
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text2);
+    }
+
+    .queue-item.active .queue-time {
+      color: var(--green);
+      text-shadow: var(--shadow-glow);
+    }
+
+    /* ── Log ── */
+    .log-wrap {
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      padding: 12px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      height: 180px;
+      overflow-y: auto;
+      color: var(--text2);
+      box-shadow: inset 0 4px 10px rgba(0, 0, 0, 0.5);
+    }
+
+    .log-line {
+      padding: 4px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+    }
+
+    .log-line:last-child {
+      border-bottom: none;
+    }
+
+    .log-line.g {
+      color: #34d399;
+    }
+
+    .log-line.y {
+      color: #fbbf24;
+    }
+
+    .log-line.r {
+      color: #f87171;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app">
+
+    <!-- Header -->
+    <header class="glass-panel">
+      <div class="logo">
+        <svg viewBox="0 0 24 24">
+          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+        </svg>
+      </div>
+      <h1>Dynamic Traffic Optimizer</h1>
+      <span class="badge green" id="status-badge">● LIVE SIMULATION</span>
+      <span class="badge dim">DAA Greedy Algo</span>
+      <span class="header-sub" id="clock">--:--:--</span>
+    </header>
+
+    <!-- Left: Stats + sliders -->
+    <aside class="left-panel glass-panel">
+      <div>
+        <div class="section-title">Telemetry</div>
+        <div class="stat-grid">
+          <div class="stat-card">
+            <div class="val" id="s-cycle">0</div>
+            <div class="lbl">Cycles Completed</div>
+          </div>
+          <div class="stat-card">
+            <div class="val" id="s-cleared">0</div>
+            <div class="lbl">Vehicles Cleared</div>
+          </div>
+          <div class="stat-card eff">
+            <div class="val" id="s-eff">—</div>
+            <div class="lbl">Sys Efficiency</div>
+          </div>
+          <div class="stat-card">
+            <div class="val" id="s-active" style="font-size:20px; padding-top:4px;">—</div>
+            <div class="lbl">Active Node</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="flex: 1;">
+        <div class="section-title" style="display: flex; justify-content: space-between;">
+          <span>Density Injectors</span>
+          <span style="color:var(--text3); font-weight:normal; text-transform:none;">Manual Override</span>
+        </div>
+        <div id="road-controls" class="road-controls-wrap"></div>
+      </div>
+    </aside>
+
+    <!-- Center: Intersection + controls -->
+    <main class="center-panel">
+      <div class="ctrl-bar">
+        <button class="btn primary" onclick="toggleSim()" id="btn-run">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M6 4h4v16H6zm8 0h4v16h-4z" />
+          </svg> Pause
+        </button>
+        <button class="btn" onclick="stepOnce()">
+          Step <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M5 12h14M12 5l7 7-7 7" />
+          </svg>
+        </button>
+        <button class="btn" onclick="randomize()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 16v5h-5M3 8V3h5M21 3v5h-5M3 16v5h5M15 15l6 6M9 9L3 3M15 9l6-6M9 15l-6 6" />
+          </svg> Randomize
+        </button>
+        <div style="width:1px; background:var(--glass-border); margin:0 4px;"></div>
+        <button class="btn danger" onclick="resetSim()">Reset</button>
+      </div>
+
+      <div class="intersection-wrapper">
+        <canvas id="inter" width="480" height="480"></canvas>
+      </div>
+
+      <div class="phase-bar-wrap">
+        <div class="phase-label">
+          <span class="phase-name" id="phase-name">Awaiting Start...</span>
+          <span class="phase-time" id="phase-time">0s</span>
+        </div>
+        <div class="phase-track">
+          <div class="phase-fill" id="phase-fill" style="width:100%"></div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Right: Queue + log -->
+    <aside class="right-panel glass-panel">
+      <div>
+        <div class="section-title">Priority Queue (Max-Heap)</div>
+        <div id="queue-list" class="queue-list"></div>
+      </div>
+
+      <div style="margin-top:auto;">
+        <div class="section-title">System Event Log</div>
+        <div class="log-wrap" id="log"></div>
+      </div>
+    </aside>
+
+  </div><!-- .app -->
+
+  <script>
+    const ROADS = [
+      { name: 'North Bound', color: '#4fa0ff', angle: 270 },
+      { name: 'South Bound', color: '#ffcc99', angle: 90 },
+      { name: 'East Bound', color: '#66ffbb', angle: 1 },
+      { name: 'West Bound', color: '#ff5555', angle: 179 },
+    ];
+    const T_CYCLE = 60, MIN_G = 5, MAX_G = 45, YELLOW_T = 2, DISCHARGE = 2;
+
+    let vehicles = [0, 0, 0, 0];
+    let state = {
+      running: true, phaseIdx: 0, timer: 0, yellow: false, yellowTimer: 0,
+      cycle: 0, cleared: 0, schedule: [], tick: 0, interval: null
+    };
+
+    // ── Greedy Scheduler ──
+    function buildSchedule() {
+      const total = vehicles.reduce((a, b) => a + b, 0) || 1;
+      const sorted = vehicles.map((v, i) => ({ i, v })).sort((a, b) => b.v - a.v);
+      state.schedule = sorted.map((e, rank) => {
+        let t = Math.round(e.v / total * T_CYCLE);
+        t = Math.max(MIN_G, Math.min(MAX_G, t));
+        return { roadIdx: e.i, vehicles: e.v, greenTime: t, rank };
+      });
+    }
+
+    function efficiency() {
+      const tot = vehicles.reduce((a, b) => a + b, 0);
+      return Math.max(0, 100 - Math.round(tot / (ROADS.length * 80) * 100));
+    }
+
+    // ── Tick Logic ──
+    function simArrivals() {
+      vehicles = vehicles.map(v => Math.max(0, v + Math.floor(Math.random() * 7) - 1));
+    }
+
+    function tick() {
+      state.tick++;
+      simArrivals();
+      const sched = state.schedule;
+      const cur = sched[state.phaseIdx % sched.length];
+
+      if (state.yellow) {
+        state.yellowTimer--;
+        if (state.yellowTimer <= 0) {
+          state.yellow = false;
+          state.phaseIdx = (state.phaseIdx + 1) % sched.length;
+          if (state.phaseIdx === 0) {
+            state.cycle++;
+            buildSchedule();
+            state.timer = state.schedule[0].greenTime;
+            log(`Cycle ${state.cycle} completed. Rebuilding Max-Heap.`, 'y');
+          } else {
+            state.timer = sched[state.phaseIdx].greenTime;
+          }
+          const nxt = state.schedule[state.phaseIdx % state.schedule.length];
+          log(`[PHASE] ${ROADS[nxt.roadIdx].name} -> GREEN (${nxt.vehicles}v / ${nxt.greenTime}s)`, 'g');
+        }
+        drawAll(); updateUI(); return;
+      }
+
+      state.timer--;
+      if (state.timer <= 0) {
+        const discharge = Math.min(vehicles[cur.roadIdx],
+          Math.round(cur.vehicles * DISCHARGE * (cur.greenTime / MAX_G)));
+        vehicles[cur.roadIdx] = Math.max(0, vehicles[cur.roadIdx] - discharge);
+        state.cleared += discharge;
+        log(`[PHASE] ${ROADS[cur.roadIdx].name} -> RED (Cleared: ${discharge}v)`, 'r');
+        state.yellow = true;
+        state.yellowTimer = YELLOW_T;
+        buildSchedule();
+      }
+      drawAll(); updateUI();
+    }
+
+    // ── Canvas Rendering ──
+    const CV = document.getElementById('inter');
+    const CX2D = CV.getContext('2d');
+    const W = 480, H = 480, CX = W / 2, CY = H / 2;
+
+    function getSignalColor(roadIdx) {
+      const cur = state.schedule[state.phaseIdx % state.schedule.length];
+      if (!cur) return '#334155'; // default dark
+      if (cur.roadIdx !== roadIdx) return '#f43f5e'; // red
+      if (state.yellow) return '#f59e0b'; // yellow
+      return '#10b981'; // green
+    }
+
+    function drawAll() {
+      const C = CX2D;
+      C.clearRect(0, 0, W, H);
+
+      // Deep asphalt background
+      C.fillStyle = '#0f172a';
+      C.beginPath(); C.arc(CX, CY, W / 2, 0, Math.PI * 2); C.fill();
+
+      // Subtle grid
+      C.strokeStyle = 'rgba(255,255,255,0.03)'; C.lineWidth = 1;
+      for (let i = 0; i < W; i += 30) {
+        C.beginPath(); C.moveTo(i, 0); C.lineTo(i, H); C.stroke();
+        C.beginPath(); C.moveTo(0, i); C.lineTo(W, i); C.stroke();
+      }
+
+      // Draw Roads
+      ROADS.forEach(r => {
+        const rad = r.angle * Math.PI / 180;
+        C.save(); C.translate(CX, CY); C.rotate(rad);
+
+        // Main road strip
+        C.fillStyle = '#1e293b';
+        C.shadowBlur = 20; C.shadowColor = 'rgba(0,0,0,0.8)';
+        C.fillRect(-36, -10, 72, W / 2);
+        C.shadowBlur = 0;
+
+        // Road borders
+        C.strokeStyle = '#334155'; C.lineWidth = 2;
+        C.beginPath(); C.moveTo(-36, 36); C.lineTo(-36, W / 2); C.stroke();
+        C.beginPath(); C.moveTo(36, 36); C.lineTo(36, W / 2); C.stroke();
+
+        // Center dash line
+        C.setLineDash([12, 16]); C.strokeStyle = '#fbbf24'; C.lineWidth = 2;
+        C.beginPath(); C.moveTo(0, 36); C.lineTo(0, W / 2); C.stroke();
+        C.setLineDash([]);
+        C.restore();
+      });
+
+      // Center Intersection Box
+      C.fillStyle = '#1e293b';
+      C.beginPath(); C.roundRect(CX - 36, CY - 36, 72, 72, 8); C.fill();
+
+      // Nodes & Signals
+      ROADS.forEach((r, i) => {
+        const rad = r.angle * Math.PI / 180;
+        const nx = CX + Math.cos(rad) * 150;
+        const ny = CY + Math.sin(rad) * 150;
+        const sig = getSignalColor(i);
+        const active = sig === '#10b981';
+
+        // Glow aura for active
+        if (active) {
+          const grad = C.createRadialGradient(nx, ny, 0, nx, ny, 60);
+          grad.addColorStop(0, 'rgba(16, 185, 129, 0.4)');
+          grad.addColorStop(1, 'rgba(16, 185, 129, 0)');
+          C.fillStyle = grad;
+          C.beginPath(); C.arc(nx, ny, 60, 0, Math.PI * 2); C.fill();
+        }
+
+        // Hardware Box
+        C.fillStyle = active ? '#064e3b' : '#0f172a';
+        C.strokeStyle = active ? '#10b981' : '#334155';
+        C.lineWidth = active ? 2 : 1;
+        C.beginPath(); C.arc(nx, ny, 32, 0, Math.PI * 2); C.fill(); C.stroke();
+
+        // Signal Lamp
+        C.shadowBlur = active ? 15 : 0;
+        C.shadowColor = sig;
+        C.fillStyle = sig;
+        C.beginPath(); C.arc(nx, ny, 12, 0, Math.PI * 2); C.fill();
+        C.shadowBlur = 0; // reset
+
+        // Label
+        C.fillStyle = '#94a3b8'; C.font = '600 12px Outfit'; C.textAlign = 'center';
+        if (r.name.includes('North')) C.fillText(r.name, nx, ny - 45);
+        else if (r.name.includes('South')) C.fillText(r.name, nx, ny + 55);
+        else if (r.name.includes('East')) C.fillText(r.name, nx + 60, ny + 4);
+        else if (r.name.includes('West')) C.fillText(r.name, nx - 60, ny + 4);
+
+        // Vehicle count badge
+        C.fillStyle = '#f8fafc'; C.font = '700 14px JetBrains Mono';
+        C.fillText(vehicles[i] + 'v', nx, ny + 5);
+      });
+
+      // Circular Timer on Active Node
+      const cur = state.schedule[state.phaseIdx % state.schedule.length];
+      if (cur && !state.yellow) {
+        const angle = ROADS[cur.roadIdx].angle;
+        const rad = angle * Math.PI / 180;
+        const nx = CX + Math.cos(rad) * 150, ny = CY + Math.sin(rad) * 150;
+        const frac = state.timer / cur.greenTime;
+
+        C.strokeStyle = '#10b981'; C.lineWidth = 4; C.lineCap = 'round';
+        C.beginPath();
+        C.arc(nx, ny, 38, -Math.PI / 2, -Math.PI / 2 + (frac * Math.PI * 2));
+        C.stroke();
+      }
+    }
+
+    // ── UI Updates ──
+    function updateUI() {
+      document.getElementById('s-cycle').textContent = state.cycle;
+      document.getElementById('s-cleared').textContent = state.cleared;
+      document.getElementById('s-eff').textContent = efficiency() + '%';
+
+      const cur = state.schedule[state.phaseIdx % state.schedule.length];
+      if (cur) {
+        const name = ROADS[cur.roadIdx].name;
+        document.getElementById('s-active').textContent = name;
+
+        const pName = document.getElementById('phase-name');
+        const pTime = document.getElementById('phase-time');
+        const pFill = document.getElementById('phase-fill');
+
+        pName.textContent = name + ' — ' + (state.yellow ? 'YELLOW' : 'GREEN');
+        pTime.textContent = state.timer + 's';
+
+        const pct = Math.round(state.timer / cur.greenTime * 100);
+        pFill.style.width = pct + '%';
+
+        if (state.yellow) {
+          pName.style.color = 'var(--yellow)';
+          pTime.style.color = 'var(--yellow)';
+          pFill.style.background = 'linear-gradient(90deg, #f59e0b, #fbbf24)';
+          pFill.style.boxShadow = '0 0 10px rgba(245, 158, 11, 0.5)';
+        } else {
+          pName.style.color = 'var(--text1)';
+          pTime.style.color = 'var(--green)';
+          pFill.style.background = 'linear-gradient(90deg, var(--green), #34d399)';
+          pFill.style.boxShadow = '0 0 10px rgba(16, 185, 129, 0.5)';
+        }
+      }
+
+      // Queue List
+      document.getElementById('queue-list').innerHTML = state.schedule.map((s, idx) => {
+        const active = idx === state.phaseIdx % state.schedule.length;
+        const r = ROADS[s.roadIdx];
+        return `
+      <div class="queue-item ${active ? 'active' : ''}">
+        <div class="queue-rank">#${s.rank + 1}</div>
+        <div class="queue-body">
+          <div class="queue-road" style="color:${active ? 'var(--text1)' : r.color}">${r.name}</div>
+          <div class="queue-detail">Queue: ${s.vehicles}v &nbsp;•&nbsp; Auth: ${s.greenTime}s</div>
+        </div>
+        <div class="queue-time">${active ? (state.timer + 's') : (s.greenTime + 's')}</div>
+      </div>
+    `;
+      }).join('');
+
+      document.getElementById('clock').textContent = new Date().toLocaleTimeString();
+
+      document.querySelectorAll('.road-vcount').forEach((el, i) => el.textContent = vehicles[i]);
+      document.querySelectorAll('.road-slider').forEach((el, i) => el.value = vehicles[i]);
+    }
+
+    function buildSliders() {
+      document.getElementById('road-controls').innerHTML = ROADS.map((r, i) => `
+    <div class="road-control">
+      <div class="road-control-header">
+        <div class="road-dot" style="background:${r.color}; box-shadow: 0 0 10px ${r.color}"></div>
+        <span class="road-name">${r.name}</span>
+        <span class="road-vcount" id="vc-${i}">${vehicles[i]}</span>
+      </div>
+      <input type="range" class="road-slider" min="0" max="80" value="${vehicles[i]}" oninput="setV(${i},+this.value)">
+    </div>
+  `).join('');
+    }
+
+    function setV(i, v) {
+      vehicles[i] = v;
+      document.getElementById('vc-' + i).textContent = v;
+      if (!state.running) buildSchedule();
+    }
+
+    function log(msg, type = '') {
+      const el = document.getElementById('log');
+      const d = document.createElement('div');
+      d.className = 'log-line ' + type;
+      d.innerHTML = `<span style="opacity:0.5">[${String(state.tick).padStart(4, '0')}]</span> ` + msg;
+      el.appendChild(d);
+      el.scrollTop = el.scrollHeight;
+      if (el.children.length > 50) el.children[0].remove();
+    }
+
+    // ── Controls ──
+    function toggleSim() {
+      state.running = !state.running;
+      const btn = document.getElementById('btn-run');
+      const badge = document.getElementById('status-badge');
+      if (state.running) {
+        state.interval = setInterval(tick, 1000);
+        btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zm8 0h4v16h-4z"/></svg> Pause';
+        badge.textContent = '● LIVE SIMULATION';
+        badge.className = 'badge green';
+      } else {
+        clearInterval(state.interval);
+        btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Resume';
+        badge.textContent = '⏸ PAUSED';
+        badge.className = 'badge dim';
+      }
+    }
+
+    function stepOnce() {
+      if (state.running) toggleSim();
+      tick();
+    }
+
+    function randomize() {
+      vehicles = ROADS.map(() => Math.floor(Math.random() * 70) + 10);
+      buildSliders(); buildSchedule();
+      log('Manual Override: Vehicle density randomized.', 'y');
+      drawAll(); updateUI();
+    }
+
+    function resetSim() {
+      clearInterval(state.interval);
+      vehicles = [42, 18, 65, 30];
+      state = {
+        running: false, phaseIdx: 0, timer: 0, yellow: false, yellowTimer: 0,
+        cycle: 0, cleared: 0, schedule: [], tick: 0, interval: null
+      };
+      buildSchedule();
+      state.timer = state.schedule[0].greenTime;
+      buildSliders(); drawAll(); updateUI();
+      document.getElementById('btn-run').innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Resume';
+      document.getElementById('status-badge').textContent = '⏸ PAUSED';
+      document.getElementById('status-badge').className = 'badge dim';
+      document.getElementById('log').innerHTML = '<div class="log-line">System Reset to default state.</div>';
+    }
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') toggleSim();
+      if (e.key === 'ArrowRight') stepOnce();
+    });
+
+    // ── Boot ──
+    buildSchedule();
+    state.timer = state.schedule[0].greenTime;
+    buildSliders();
+    log('System Booted. Greedy Scheduler Initialized.', 'g');
+    drawAll(); updateUI();
+    state.interval = setInterval(tick, 1000);
+  </script>
+</body>
+
+</html>
