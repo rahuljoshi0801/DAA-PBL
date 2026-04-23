@@ -68,13 +68,20 @@ struct Road {
   int originalInput = 0;
   Sig signal = Sig::R;
   int totalCleared = 0;
+  bool hasEmergency = false; // Emergency vehicle preemption flag
 };
 
 struct SchedEntry {
   int roadIdx, vehicles, greenTime, rank;
-  // Max-heap comparator: road with MOST vehicles has highest priority
-  // operator< is reversed because std::priority_queue is a max-heap
-  bool operator<(const SchedEntry &o) const { return vehicles < o.vehicles; }
+  bool hasEmergency = false;
+  // Max-heap comparator:
+  // Emergency vehicles ALWAYS jump to front regardless of vehicle count.
+  // If neither or both have emergency, fall back to vehicle count (greedy).
+  bool operator<(const SchedEntry &o) const {
+    if (this->hasEmergency != o.hasEmergency)
+      return !this->hasEmergency; // emergency road has HIGHER priority
+    return vehicles < o.vehicles; // greedy fallback
+  }
 };
 
 // Simulated OpenCV MOG2 detector
@@ -109,10 +116,13 @@ public:
       int vi = roads[i].vehicles;
       int t = (int)((float)vi / total * T_CYCLE + 0.5f);
       t = clamp(t, MIN_GREEN, MAX_GREEN);
+      // Emergency vehicles always get MAX_GREEN green time
+      if (roads[i].hasEmergency) t = MAX_GREEN;
       SchedEntry e;
       e.roadIdx = i;
       e.vehicles = vi;
       e.greenTime = t;
+      e.hasEmergency = roads[i].hasEmergency;
       e.rank = 0; // rank assigned during extraction
       pq.push(e); // O(log n) heap insert
     }
@@ -286,11 +296,29 @@ class TrafficSystem {
       done = true;
       return;
     }
+    // ── Random Emergency Vehicle Simulation (12% chance per road per cycle)
+    static std::mt19937 rng(std::random_device{}());
+    std::uniform_int_distribution<int> chance(1, 100);
+    for (int i = 0; i < (int)roads.size(); i++) {
+      roads[i].hasEmergency = false; // Reset from previous cycle
+      if (chance(rng) <= 12) {
+        roads[i].hasEmergency = true;
+        std::cout << "\n  " << BGRED << BOLD << " !! EMERGENCY !! "
+                  << RST << " Ambulance detected on "
+                  << BOLD << roads[i].name << RST
+                  << " — preempting to front of queue!\n";
+        sleepMs(800);
+      }
+    }
     schedule = GreedyScheduler::build(roads);
     if (!schedule.empty()) {
       timer = schedule[0].greenTime;
       allRed();
       roads[schedule[0].roadIdx].signal = Sig::G;
+      // Alert if the first road in schedule has an emergency
+      if (schedule[0].hasEmergency)
+        std::cout << "  " << BGGRN << BOLD << " EMERGENCY GREEN " << RST
+                  << " Clearing " << roads[schedule[0].roadIdx].name << "\n";
     }
     printSched(roads, schedule, cycle);
   }

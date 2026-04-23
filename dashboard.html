@@ -668,19 +668,27 @@
 
     // FIX: Start with realistic non-zero vehicle counts
     let vehicles = [30, 12, 50, 22];
+    let emergency = [false, false, false, false]; // Emergency preemption flags
     let state = {
       running: true, phaseIdx: 0, timer: 0, yellow: false, yellowTimer: 0,
       cycle: 0, cleared: 0, schedule: [], tick: 0, interval: null
     };
+    let sirenPhase = 0; // For animated siren effect
 
-    // ── Greedy Scheduler ──
+    // ── Greedy Scheduler (Emergency-Aware) ──
     function buildSchedule() {
       const total = vehicles.reduce((a, b) => a + b, 0) || 1;
-      const sorted = vehicles.map((v, i) => ({ i, v })).sort((a, b) => b.v - a.v);
+      // Sort: emergency roads ALWAYS first, then by vehicle count (greedy)
+      const sorted = vehicles.map((v, i) => ({ i, v, emg: emergency[i] }))
+        .sort((a, b) => {
+          if (a.emg !== b.emg) return a.emg ? -1 : 1; // emergency first
+          return b.v - a.v; // greedy fallback
+        });
       state.schedule = sorted.map((e, rank) => {
         let t = Math.round(e.v / total * T_CYCLE);
         t = Math.max(MIN_G, Math.min(MAX_G, t));
-        return { roadIdx: e.i, vehicles: e.v, greenTime: t, rank };
+        if (e.emg) t = MAX_G; // Emergency always gets max green time
+        return { roadIdx: e.i, vehicles: e.v, greenTime: t, rank, emergency: e.emg };
       });
     }
 
@@ -697,6 +705,7 @@
 
     function tick() {
       state.tick++;
+      sirenPhase = (sirenPhase + 1) % 6; // animate siren
       simArrivals();
       const sched = state.schedule;
       const cur = sched[state.phaseIdx % sched.length];
@@ -708,6 +717,8 @@
           state.phaseIdx = (state.phaseIdx + 1) % sched.length;
           if (state.phaseIdx === 0) {
             state.cycle++;
+            // Clear emergency flags after the cycle that served them
+            emergency = emergency.map(() => false);
             buildSchedule();
             state.timer = state.schedule[0].greenTime;
             log(`Cycle ${state.cycle} completed. Rebuilding Max-Heap.`, 'y');
@@ -828,6 +839,20 @@
         else if (r.name.includes('East')) C.fillText(r.name, nx + 60, ny + 4);
         else if (r.name.includes('West')) C.fillText(r.name, nx - 60, ny + 4);
 
+        // Emergency siren glow (alternating red/blue)
+        if (emergency[i]) {
+          const sirenColor = sirenPhase < 3 ? 'rgba(239,68,68,0.5)' : 'rgba(59,130,246,0.5)';
+          const sirenGrad = C.createRadialGradient(nx, ny, 0, nx, ny, 55);
+          sirenGrad.addColorStop(0, sirenColor);
+          sirenGrad.addColorStop(1, 'rgba(0,0,0,0)');
+          C.fillStyle = sirenGrad;
+          C.beginPath(); C.arc(nx, ny, 55, 0, Math.PI * 2); C.fill();
+          // 🚨 text above node
+          C.fillStyle = '#fff'; C.font = '16px serif';
+          C.textAlign = 'center';
+          C.fillText('🚨', nx, ny - 38);
+        }
+
         // Vehicle count badge
         C.fillStyle = '#f8fafc'; C.font = '700 14px JetBrains Mono';
         C.fillText(vehicles[i] + 'v', nx, ny + 5);
@@ -911,10 +936,35 @@
         <div class="road-dot" style="background:${r.color}; box-shadow: 0 0 10px ${r.color}"></div>
         <span class="road-name">${r.name}</span>
         <span class="road-vcount" id="vc-${i}">${vehicles[i]}</span>
+        <button onclick="setEmergency(${i})" id="emg-${i}"
+          style="background:transparent;border:1px solid rgba(239,68,68,0.3);color:#f87171;
+                 border-radius:6px;padding:2px 7px;font-size:11px;cursor:pointer;
+                 font-family:var(--font-sans);transition:all 0.2s;margin-left:4px">
+          🚨
+        </button>
       </div>
       <input type="range" class="road-slider" min="0" max="80" value="${vehicles[i]}" oninput="setV(${i},+this.value)">
     </div>
   `).join('');
+    }
+
+    function setEmergency(i) {
+      emergency[i] = !emergency[i];
+      const btn = document.getElementById('emg-' + i);
+      if (emergency[i]) {
+        btn.style.background = 'rgba(239,68,68,0.2)';
+        btn.style.borderColor = '#f87171';
+        btn.style.boxShadow = '0 0 8px rgba(239,68,68,0.4)';
+        log(`🚨 EMERGENCY OVERRIDE: ${ROADS[i].name} — Preempting to front of queue!`, 'r');
+        buildSchedule(); // Immediately re-sort with emergency at top
+      } else {
+        btn.style.background = 'transparent';
+        btn.style.borderColor = 'rgba(239,68,68,0.3)';
+        btn.style.boxShadow = 'none';
+        log(`✅ Emergency cleared on ${ROADS[i].name}`, 'g');
+        buildSchedule();
+      }
+      updateUI();
     }
 
     function setV(i, v) {
